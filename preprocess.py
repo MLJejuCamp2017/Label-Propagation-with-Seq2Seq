@@ -161,7 +161,96 @@ def make_voca(src_lang='ko', tgt_lang='en'):
     with open(voca_path, 'wb') as f:
         pickle.dump([byte2index, index2byte, voca_size], f)
 
+"""
+Preprocessings for Neural Graph Models
+
+All codes below come from "github.com/gssci/neural-graph-machine-sentiment-analysis"
+"""
+
+"""
+This script uses the Google News Word2Vec corpus to calculate
+the average embeddings of each review in our dataset. 
+It stores them into sparse matrices that I can then reuse in another script
+"""
+
+import logging
+import gensim
+import numpy as np
+import scipy as sp
+import scipy.sparse
+import glob
+from nltk.tokenize import word_tokenize
+from konlpy.tag import  Kkma
+
+def create_avg_embeddings(word2vec_name='ko_vec', fpath_L='./data/raw/ko.train', fpath_U='./data/raw/ko.train.mono'):
+
+    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+    model = gensim.models.KeyedVectors.load_word2vec_format('./data/utils/%s.bin' % word2vec_name, binary=True)
+    kkma = Kkma()
+
+    # the elements of both matrices below constitute the nodes of our graph
+    with open(fpath_L, 'r') as f, open(fpath_U, 'r') as g:
+        ss_L = f.readlines()
+        ss_L = [x[:-1] for x in ss_L]
+
+        ss_U = g.readlines()
+        ss_U = [x[:-1] for x in ss_U]
+
+    # matrix of labeled embeddings
+    L = sp.sparse.lil_matrix((len(ss_L), model.vector_size))
+
+    # matrix of unlabeled embeddings
+    U = sp.sparse.lil_matrix((len(ss_U), model.vector_size))
+
+    def word2vec(w):
+        """
+        with this quick trick I can calculate the embeddings without normalizing the text (removing puctuaction, stop words etc...)
+        If I pass a word that is not in the word2vec_model, like a stopword or some weird symbol, it just returns a zero vector that
+        does not cotribute to the avg embedding
+        """
+        out = np.zeros(model.vector_size)
+        try:
+            out = model.word_vec(w)
+        finally:
+            return out
+
+    i = 0
+    for s in ss_L:
+        if word2vec_name=='ko_vec':
+            words = [x for x, _ in kkma.pos(s)]
+        else:
+            words = word_tokenize(s)
+        
+        # embedding for review is calculated as average of the embeddings of all words
+        # this is not ideal but is shown to work reasonably well in literature
+        # if you need something a bit more sophisticated, look into Doc2Vec algorithms
+        L[i] = np.mean([word2vec(w) for w in words], axis=0)
+        print(str(i), end='\r')
+        i = i+1
+    print()
+
+    # exports matrix to be used later in another script
+    sp.sparse.save_npz('./data/graph/labeled.npz', L.tocsr())
+
+
+    j=0
+    for s in ss_U:
+        if word2vec_name=='ko_vec':
+            words = [x for x, _ in kkma.pos(s)]
+        else:
+            words = word_tokenize(s)
+
+        U[j] = np.mean([word2vec(w) for w in words], axis=0)
+        print(str(j), end='\r')
+        j = j+1
+
+    sp.sparse.save_npz('./data/graph/unlabeled.npz', U.tocsr())
+
+
+
+
 if __name__ == "__main__":
     split_data('./data/raw/crawl_dict_ko.txt', 
             './data/raw/crawl_dict_en.txt', 'ko', 'en')
     make_voca('ko', 'en')
+    create_avg_embeddings()

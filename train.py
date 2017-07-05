@@ -64,12 +64,12 @@ def save_and_test():
     pred = np.zeros((test_size, data.max_len)).astype(np.int32)
 
     # output of encoder
-    x_enc = sess.run(enc, {model.x: data.source[:test_size]})
+    x_enc = sess.run(model.enc, {model.x: data.source[:test_size]})
 
     # generate output sequence
     for i in range(data.max_len):
         # predict character
-        out = sess.run(label, {model.enc: x_enc, model.y_src: pred_prev,
+        out = sess.run(model.label, {model.enc: x_enc, model.y_src: pred_prev,
                               model.p_keep_conv: 1.0})
         # update character sequence
         if i < data.max_len - 1:
@@ -77,7 +77,7 @@ def save_and_test():
         pred[:, i] = out[:, i]
     # print result
     print('\nsources : --------------')
-    data.print_index(data.source[:test_size], has_token=True)
+    data.print_index(data.source[:test_size])
     print('\ntargets : --------------')
     data.print_index(pred[:,:])
 
