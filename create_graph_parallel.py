@@ -11,24 +11,27 @@ they appear in the glob function, so that we know what number corresponds to wha
 import numpy as np
 import scipy as sp
 import scipy.sparse
-from sklearn.metrics.pairwise import cosine_similarity
-from multiprocessing import Process, Manager, Value, Lock, cpu_count
-import time
+from sklearn.neighbors import LSHForest
+from time import time
 import pickle
 import glob
-from operator import mul
 
 L = sp.sparse.load_npz('./data/graph/labeled.npz')
 U = sp.sparse.load_npz('./data/graph/unlabeled.npz')
 M = sp.sparse.vstack([L,U])
 last_index_l = L.shape[0]
-last_index_u = U.shape[0]
+last_index_u = last_index_l + U.shape[0]
 
 # we only keep the closest neighbors
 max_neighs = 5
 size = M.shape[0]
 
-def compute_graph_for_embedding(graph,edges_weights,edges_ll,edges_lu,edges_uu,chunk,counter,lock):
+#lshf = LSHForest(n_estimators=15, n_candidates=50, n_neighbors=6, random_state=42)
+lshf = LSHForest(random_state=42) 
+lshf.fit(M)
+
+
+def compute_graph_for_embedding(graph,edges_weights,edges_ll,edges_lu,edges_uu):
     """
     Function for computing the subgraph for nodes.
     Note that the edges_* structures are meant to be used later in the objective function of the Conv-NN
@@ -38,18 +41,28 @@ def compute_graph_for_embedding(graph,edges_weights,edges_ll,edges_lu,edges_uu,c
     :param edges_ll: edges from labeled node to labeled node
     :param edges_lu: edges from labeled node to unlabeled node
     :param edges_uu: edges from unlabeled node to unlabeled node
-    :param chunk: range of values repressenting a chuck of embeddings (nodes) for which we want to find the neighbors
-    :param counter: shared memory value used to track progress
-    :param lock: lock to ensure atomicity of counter update
     """
-    for i in chunk:
-        sim = cosine_similarity(M[i],M)
-        # sklearn outputs a matrix, we only need the row vector
-        sim = sim[0]
-        #set the embedding similarity with itself (==1) to zero
-        sim[i] = 0
+    batch_size = 1000
+    batch_num = int(np.ceil(size / batch_size))
+    
+    sims, inds = [], []
 
-        neighbors_indices = list(sim.argsort()[-max_neighs::][::-1])
+    for i in range(batch_num):
+        t_str = time()
+        distances, indices = lshf.kneighbors(M[i*batch_size:(i+1)*batch_size],\
+                                            n_neighbors=6)
+        batch_ids = np.vstack(np.arange(i*batch_size, int(np.min([(i+1)*batch_size, size]))))
+        xs, ys = np.where(indices==batch_ids)
+        distances[xs,ys] = 2.0
+        sims.extend(1-distances)
+        inds.extend(inds)
+        print(i, time() - t_str, end='\r')
+    print()
+    pickle.dump([sims, inds], open("./data/graph/approx_nn.p", "wb"))
+    #[sims, inds] = pickle.load(open("./data/graph/approx_nn.p", "rb"))
+
+    for i in range(size):
+        neighbors_indices = list(indices[i][sims[i].argsort()[-max_neighs::][::-1]])
         correct_indices = [j for j in neighbors_indices if i < j]
 
         graph.update({i:correct_indices})
@@ -58,7 +71,7 @@ def compute_graph_for_embedding(graph,edges_weights,edges_ll,edges_lu,edges_uu,c
 
         if n > 0:
             edges = list(zip([i] * n, correct_indices))
-            edges_weights.update(dict(zip(edges,np.take(sim,correct_indices))))
+            edges_weights.update(dict(zip(edges,np.take(sims[i],correct_indices))))
 
             for j in correct_indices:
                 if (0 <= i < last_index_l) and (0 <= j < last_index_l):
@@ -67,56 +80,17 @@ def compute_graph_for_embedding(graph,edges_weights,edges_ll,edges_lu,edges_uu,c
                     edges_lu.append((i,j))
                 else:
                     edges_uu.append((i,j))
-        with lock:
-            counter.value += 1
-            print(str(counter.value))
     return
-
-
-def split_load(size,cores):
-    jobs_per_core = size//cores
-    job_counts = [jobs_per_core]*cores
-
-    split = list(map(mul, job_counts, range(1, cores + 1)))
-    n = np.sum(job_counts)
-
-    if n < size:
-        split[cores-1] += size-n
-
-    ranges = []
-
-    for i in range(cores):
-        if i == 0:
-            ranges += [range(0,split[i])]
-        else:
-            ranges += [range(split[i-1],split[i])]
-
-    return ranges
 
 if __name__ == '__main__':
 
-    manager = Manager()
-    graph = manager.dict()
-    edges_weights = manager.dict()
-    edges_ll = manager.list()
-    edges_lu = manager.list()
-    edges_uu = manager.list()
+    graph = dict()
+    edges_weights = dict()
+    edges_ll = list()
+    edges_lu = list()
+    edges_uu = list()
 
-    counter = Value('i', 0)
-    lock = Lock()
-
-    processes = []
-    num_of_cpu = 20
-
-    chunks = split_load(size,num_of_cpu)
-
-    for chunk in chunks:
-        p = Process(target=compute_graph_for_embedding,
-                    args=(graph, edges_weights, edges_ll, edges_lu, edges_uu, chunk, counter, lock))
-        processes += [p]
-
-    _ = [p.start() for p in processes]
-    _ = [p.join() for p in processes]
+    compute_graph_for_embedding(graph, edges_weights, edges_ll, edges_lu, edges_uu)
 
     # save to file the data structure that we worked so hard to compute
     pickle.dump(dict(graph), open("./data/graph/graph.p", "wb"))

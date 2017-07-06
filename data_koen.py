@@ -16,7 +16,7 @@ class KOEN(object):
 
         if not self._restore(mode):
             # load train corpus
-            self.source, self.target = self._load_corpus(mode=mode)
+            self.source, self.target, self.ids = self._load_corpus(mode=mode)
             self.num_data = len(self.source)
             self._save(mode)
 
@@ -35,14 +35,14 @@ class KOEN(object):
                     
         with open('data/cache/%s2%s.%s.pickle' % (self.src_lang, self.tgt_lang, mode), 'wb') as f:
             pickle.dump([self.byte2index, self.index2byte, self.voca_size,
-                self.max_len, self.num_data, self.source, self.target], f)
+                self.max_len, self.num_data, self.source, self.target, self.ids], f)
 
     def _restore(self, mode):
         if glob('data/cache/%s2%s.%s.pickle' % (self.src_lang, self.tgt_lang, mode)):
             with open('data/cache/%s2%s.%s.pickle' % (self.src_lang, self.tgt_lang, mode), 'rb') as f:
                 [self.byte2index, self.index2byte, self.voca_size,
                         self.max_len, self.num_data,
-                        self.source, self.target] = pickle.load(f)
+                        self.source, self.target, self.ids] = pickle.load(f)
             return True
         else:
             return False
@@ -88,7 +88,11 @@ class KOEN(object):
 
         # remove short and long sentence
         src, tgt = [], []
+        ids = dict()
+        idx = -1
+        cnt = 0
         for s, t in zip(sources, targets):
+            idx += 1
             if 0 <= len(s) < self.max_len-1 and 0 <= len(t) < self.max_len:
                 try:
                     [self.byte2index[ch] for ch in s]
@@ -96,8 +100,11 @@ class KOEN(object):
                 except KeyError as e:
                     continue
 
+                ids[idx] = cnt
                 src.append(s)
                 tgt.append(t)
+                cnt += 1
+
 
         # convert to index list and add <EOS> to end of sentence
         for i in range(len(src)):
@@ -109,7 +116,7 @@ class KOEN(object):
             src[i] += [0] * (self.max_len - len(src[i]))
             tgt[i] += [0] * (self.max_len - len(tgt[i]))
 
-        return src, tgt
+        return src, tgt, ids
 
     def to_batch(self, sentences):
         # convert to index list and add <EOS> to end of sentence
@@ -137,4 +144,5 @@ class KOEN(object):
                 ret.append(unicodedata.normalize('NFC', str_))
         if not sysout:        
             return ret
+
 
