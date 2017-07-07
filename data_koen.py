@@ -72,18 +72,6 @@ class KOEN(object):
         with open(voca_path, 'rb') as f:
             [self.byte2index, self.index2byte, self.voca_size] = pickle.load(f)
 
-            # make vocabulary
-            unique_all_bytes = list(np.unique(all_bytes))
-            unique_all_bytes.sort()
-            self.index2byte = [0, 1, 2, 3] + unique_all_bytes  # add <EMP>, <EOS>, <2EN>, <2KO>
-            self.byte2index = {}
-            for i, b in enumerate(self.index2byte):
-                self.byte2index[b] = i
-            self.voca_size = len(self.index2byte)
-
-            with open(voca_path, 'wb') as f:
-                pickle.dump([self.byte2index, self.index2byte, self.voca_size], f)
-
         self.max_len = 150
 
         # remove short and long sentence

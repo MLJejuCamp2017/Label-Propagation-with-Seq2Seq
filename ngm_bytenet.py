@@ -65,7 +65,7 @@ def res_block(input, filter_size=3, dilation_rate=None, causal=False, name='res_
         # reduce dimension
         w_shape = [1, in_dim, in_dim//2]
         w_stddev = np.sqrt(2./np.prod(w_shape[:-1])) # He's init
-        w = tf.get_variable(shape=w_shape, initializer=tf.random_normal_initializer(stddev=w_stddev)
+        w = tf.get_variable(shape=w_shape, initializer=tf.random_normal_initializer(stddev=w_stddev))
         x = tf.nn.convolution(x, w, padding='SAME')
         x = layer_norm(x, causal)
         x = tf.nn.relu(x)
@@ -124,9 +124,9 @@ def decoder(input, filter_size=3, num_block_sets=6):
     return x
 
 
-def g(x, y, y0, p_keep_conv, input_dim, input_max_len, latent_dim,  num_block_sets):
+def g_e(x, input_dim, input_max_len, latent_dim,  num_block_sets):
     """
-    ByteNet
+    ByteNet - Encoder
 
     For details, see 'Neural Machine Translation in Linear Time(https://arxiv.org/abs/1610.10099)'.
     """ 
@@ -137,14 +137,8 @@ def g(x, y, y0, p_keep_conv, input_dim, input_max_len, latent_dim,  num_block_se
     # inputs
     #
     with tf.variable_scope('input'):
-        # place holders
-
         # make embedding matrix for source and target
-        emb_x = tf.get_variable(tf.random_uniform([input_dim, latent_dim], -1.0, 1.0))
-        emb_y = tf.get_variable(tf.random_uniform([input_dim, latent_dim], -1.0, 1.0))
-
-        # shift target for training source
-        y_src = tf.concat([y0, y[:, :-1]], 1)
+        emb_x = tf.get_variable(shape=[input_dim, latent_dim], initializer=tf.random_uniform_initializer(-1.0, 1.0))
 
     #
     # encode graph ( atrous convolution )
@@ -153,6 +147,25 @@ def g(x, y, y0, p_keep_conv, input_dim, input_max_len, latent_dim,  num_block_se
     # embed table lookup
     enc_emb = tf.nn.embedding_lookup(emb_x, x)
     enc = encoder(enc_emb, filter_size=filter_size, num_block_sets=num_block_sets)
+        
+    return enc
+                            
+def g_d(enc, y, y0, p_keep_conv, input_dim, input_max_len, latent_dim,  num_block_sets):
+    """
+    ByteNet - Decoder
+
+    For details, see 'Neural Machine Translation in Linear Time(https://arxiv.org/abs/1610.10099)'.
+    """ 
+
+    filter_size = 3
+
+    #
+    # inputs
+    #
+    with tf.variable_scope('input'):
+        emb_y = tf.get_variable(shape=[input_dim, latent_dim], initializer=tf.random_uniform_initializer(-1.0, 1.0))\
+        # shift target for training source
+        y_src = tf.concat([y0, y[:, :-1]], 1)
 
     #
     # decode graph ( causal convolution )

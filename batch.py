@@ -8,21 +8,36 @@ import unicodedata
 graph = EmbeddingsGraph().graph
 batch_size = 32
 data = KOEN(batch_size, 'train')
+data2 = KOEN(batch_size, 'train.mono')
 
 with open('./data/raw/ko.train', 'r') as f:
     ss_L = f.readlines()
     ss_L = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in ss_L]
-
-#with open('./data/raw/en.train', 'r') as f:
-#    ts_L = f.readlines()
-#    ts_L = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in ts_L]
-
+    
 with open('./data/raw/ko.train.mono', 'r') as f:
     ss_U = f.readlines()
     ss_U = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in ss_U]
 
 l = len(ss_L) #last index of labeled samples
 u = l + len(ss_U) #last index of all samples
+
+for key, value in data2.ids.items():
+    data.ids[key+l] = data.num_data + value
+    
+data.source.extend(data2.source)
+
+##################
+##### remove #####
+##################
+for (u, v) in graph.edges():
+    try:
+        data.ids[u]
+        data.ids[v]
+    except:
+        graph.remove_edge(u,v)
+        
+data.source = np.array(data.source)
+data.target = np.array(data.target)
 
 def label(i):
     if 0 <= i < l:
@@ -62,23 +77,23 @@ def next_batch(h_edges, start, finish):
     c_ull = [1 / len(graph.edges(n)) for n in u_ll]
     v_ll = [e[1] for e in edges_ll]
     c_vll = [1 / len(graph.edges(n)) for n in v_ll]
-    nodes_ll_u = X[u_ll]
+    nodes_ll_u = data.source[[data.ids[x] for x in u_ll]]
 
     labels_ll_u = np.vstack([label(n) for n in u_ll])
 
-    nodes_ll_v = X[v_ll]
+    nodes_ll_v = data.source[[data.ids[x] for x in v_ll]]
 
     labels_ll_v = np.vstack([label(n) for n in v_ll])
 
     u_lu = [e[0] for e in edges_lu]
     c_ulu = [1 / len(graph.edges(n)) for n in u_lu]
-    nodes_lu_u = X[u_lu]
-    nodes_lu_v = X[[e[1] for e in edges_lu]]
+    nodes_lu_u = data.source[[data.ids[x] for x in u_lu]]
+    nodes_lu_v = data.source[[data.ids[x] for x in [e[1] for e in edges_lu]]]
 
     labels_lu = np.vstack([label(n) for n in u_lu])
 
-    nodes_uu_u = X[[e[0] for e in edges_uu]]
-    nodes_uu_v = X[[e[1] for e in edges_uu]]
+    nodes_uu_u = data.source[[data.ids[x] for x in [e[0] for e in edges_uu]]]
+    nodes_uu_v = data.source[[data.ids[x] for x in [e[1] for e in edges_uu]]]
 
     return nodes_ll_u, nodes_ll_v, labels_ll_u, labels_ll_v, \
            nodes_uu_u, nodes_uu_v, nodes_lu_u, nodes_lu_v, \
@@ -92,15 +107,6 @@ def batch_iter(batch_size):
     """
 
     data_size = len(graph.edges())
-    ##################
-    ##### remove #####
-    ##################
-    # for (u, v) in graph.edges():
-    #     try:
-    #         data.ids[u]
-    #         data.ids[v]
-    #     except:
-    #         graph.pop_edges((u,v))
 
     edges = np.random.permutation(graph.edges())
 
@@ -113,4 +119,3 @@ def batch_iter(batch_size):
         start_index = batch_num * batch_size
         end_index = min((batch_num + 1) * batch_size, data_size)
         yield next_batch(edges,start_index,end_index)
-

@@ -82,7 +82,7 @@ def save_and_test():
     data.print_index(pred[:,:])
 
 t_avg = 1.
-num_iter = 32
+num_iter = 3
 l_avg = 1.
 t_timer = time.time()
 for i in range(num_iter):
