@@ -1,47 +1,32 @@
 import numpy as np
 import networkx as nx
 from embeddings_graph import EmbeddingsGraph
-from bytenet import ByteNet
-from data_koen import KOEN
+from data import KOEN
 import unicodedata
 
 graph = EmbeddingsGraph().graph
 batch_size = 32
+
 data = KOEN(batch_size, 'train')
 data2 = KOEN(batch_size, 'train.mono')
 
 with open('./data/raw/ko.train', 'r') as f:
     ss_L = f.readlines()
-    ss_L = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in ss_L]
     
 with open('./data/raw/ko.train.mono', 'r') as f:
     ss_U = f.readlines()
-    ss_U = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in ss_U]
-
+    
 l = len(ss_L) #last index of labeled samples
 u = l + len(ss_U) #last index of all samples
 
-for key, value in data2.ids.items():
-    data.ids[key+l] = data.num_data + value
-    
 data.source.extend(data2.source)
 
-##################
-##### remove #####
-##################
-for (u, v) in graph.edges():
-    try:
-        data.ids[u]
-        data.ids[v]
-    except:
-        graph.remove_edge(u,v)
-        
 data.source = np.array(data.source)
 data.target = np.array(data.target)
 
 def label(i):
     if 0 <= i < l:
-        return data.target[data.ids[i]]
+        return data.target[i]
 
 
 def next_batch(h_edges, start, finish):
@@ -77,23 +62,33 @@ def next_batch(h_edges, start, finish):
     c_ull = [1 / len(graph.edges(n)) for n in u_ll]
     v_ll = [e[1] for e in edges_ll]
     c_vll = [1 / len(graph.edges(n)) for n in v_ll]
-    nodes_ll_u = data.source[[data.ids[x] for x in u_ll]]
+    nodes_ll_u = data.source[u_ll]
 
-    labels_ll_u = np.vstack([label(n) for n in u_ll])
+    if len(u_ll) != 0:
+        labels_ll_u = np.vstack([label(n) for n in u_ll])
+    else:
+        labels_ll_u = np.array([])
 
-    nodes_ll_v = data.source[[data.ids[x] for x in v_ll]]
+    nodes_ll_v = data.source[v_ll]
 
-    labels_ll_v = np.vstack([label(n) for n in v_ll])
+    if len(v_ll) != 0:
+        labels_ll_v = np.vstack([label(n) for n in v_ll])
+    else:
+        labels_ll_v = np.array([])
 
     u_lu = [e[0] for e in edges_lu]
     c_ulu = [1 / len(graph.edges(n)) for n in u_lu]
-    nodes_lu_u = data.source[[data.ids[x] for x in u_lu]]
-    nodes_lu_v = data.source[[data.ids[x] for x in [e[1] for e in edges_lu]]]
+    nodes_lu_u = data.source[u_lu]
+    nodes_lu_v = data.source[[e[1] for e in edges_lu]]
 
-    labels_lu = np.vstack([label(n) for n in u_lu])
+    
+    if len(u_lu) != 0:
+        labels_lu = np.vstack([label(n) for n in u_lu])
+    else:
+        labels_lu = np.array([])
 
-    nodes_uu_u = data.source[[data.ids[x] for x in [e[0] for e in edges_uu]]]
-    nodes_uu_v = data.source[[data.ids[x] for x in [e[1] for e in edges_uu]]]
+    nodes_uu_u = data.source[[e[0] for e in edges_uu]]
+    nodes_uu_v = data.source[[e[1] for e in edges_uu]]
 
     return nodes_ll_u, nodes_ll_v, labels_ll_u, labels_ll_v, \
            nodes_uu_u, nodes_uu_v, nodes_lu_u, nodes_lu_v, \

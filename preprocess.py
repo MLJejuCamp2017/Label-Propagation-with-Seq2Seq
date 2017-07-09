@@ -3,6 +3,13 @@ import unicodedata
 import os
 import pickle
 
+import gensim
+from nltk.tokenize import word_tokenize
+from konlpy.tag import  Kkma
+
+MIN_LEN = 10
+MAX_LEN = 150
+
 def split_data(src_path, tgt_path, src_lang='ko', tgt_lang='en'):
     """
     Split parallel dataset into training/validation/test dataset.
@@ -28,15 +35,22 @@ def split_data(src_path, tgt_path, src_lang='ko', tgt_lang='en'):
         sources_raw = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in sources_raw]
         targets_raw = [unicodedata.normalize("NFKD", unicode_str[:-1]) for unicode_str in targets_raw]
         ###
-
+    
+    sources_tmp, targets_tmp = [], []
+    for i in range(len(sources_raw)):
+        if (MIN_LEN <= len(sources_raw[i]) < MAX_LEN) and (MIN_LEN <= len(targets_raw[i]) < MAX_LEN):
+            sources_tmp.append(sources_raw[i])
+            targets_tmp.append(targets_raw[i])
+    sources_raw, targets_raw = sources_tmp, targets_tmp
+    
     # Convert characters into integers
     all_bytes, sources, targets = [], [], []
     for i in range(len(sources_raw)):
-        src = [ord(ch) for ch in sources_raw[i]]
-        tgt = [ord(ch) for ch in targets_raw[i]]
-        sources.append(src)
-        targets.append(tgt)
-        all_bytes.extend(src+tgt)
+            src = [ord(ch) for ch in sources_raw[i]]
+            tgt = [ord(ch) for ch in targets_raw[i]]
+            sources.append(src)
+            targets.append(tgt)
+            all_bytes.extend(src+tgt)
         
     ### rule 2. remove obsolete characters & sentences
     unique_bytes = np.unique(all_bytes)
@@ -122,7 +136,6 @@ def split_data(src_path, tgt_path, src_lang='ko', tgt_lang='en'):
                 f_src.write(ss_1[ids[i]]+'\n')
                 f_tgt.write(ss_2[ids[i]]+'\n')
 
-
 def make_voca(src_lang='ko', tgt_lang='en'):
     # Make directory if it doesn't exist
     directory = './data/cache'
@@ -173,18 +186,8 @@ the average embeddings of each review in our dataset.
 It stores them into sparse matrices that I can then reuse in another script
 """
 
-import logging
-import gensim
-import numpy as np
-import scipy as sp
-import scipy.sparse
-import glob
-from nltk.tokenize import word_tokenize
-from konlpy.tag import  Kkma
-
 def create_avg_embeddings(word2vec_name='ko_vec', fpath_L='./data/raw/ko.train', fpath_U='./data/raw/ko.train.mono'):
 
-    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
     model = gensim.models.KeyedVectors.load_word2vec_format('./data/utils/%s.bin' % word2vec_name, binary=True)
     kkma = Kkma()
 
@@ -197,10 +200,10 @@ def create_avg_embeddings(word2vec_name='ko_vec', fpath_L='./data/raw/ko.train',
         ss_U = [x[:-1] for x in ss_U]
 
     # matrix of labeled embeddings
-    L = sp.sparse.lil_matrix((len(ss_L), model.vector_size))
+    L = np.empty((len(ss_L), model.vector_size), dtype='float32')
 
     # matrix of unlabeled embeddings
-    U = sp.sparse.lil_matrix((len(ss_U), model.vector_size))
+    U = np.empty((len(ss_U), model.vector_size), dtype='float32')
 
     def word2vec(w):
         """
@@ -228,9 +231,9 @@ def create_avg_embeddings(word2vec_name='ko_vec', fpath_L='./data/raw/ko.train',
         print(str(i), end='\r')
         i = i+1
     print()
-
-    # exports matrix to be used later in another script
-    sp.sparse.save_npz('./data/graph/labeled.npz', L.tocsr())
+    
+    with open('./data/graph/labeled.pickle', 'wb') as f:
+        pickle.dump(L, f)
 
 
     j=0
@@ -244,10 +247,8 @@ def create_avg_embeddings(word2vec_name='ko_vec', fpath_L='./data/raw/ko.train',
         print(str(j), end='\r')
         j = j+1
 
-    sp.sparse.save_npz('./data/graph/unlabeled.npz', U.tocsr())
-
-
-
+    with open('./data/graph/unlabeled.pickle', 'wb') as f:
+        pickle.dump(U, f)
 
 if __name__ == "__main__":
     split_data('./data/raw/crawl_dict_ko.txt', 
