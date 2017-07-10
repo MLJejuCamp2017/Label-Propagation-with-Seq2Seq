@@ -55,6 +55,11 @@ def next_batch(h_edges, start, finish):
         else:
             edges_uu.append((i, j))
             weights_uu.append(graph.get_edge_data(i,j)['weight'])
+    
+    if len(edges_ll)==0 or len(edges_lu)==0 or len(edges_uu)==0:
+        np.random.shuffle(h_edges[start:])
+        return next_batch(h_edges,start,finish)
+        
 
     u_ll = [e[0] for e in edges_ll]
 
@@ -67,14 +72,14 @@ def next_batch(h_edges, start, finish):
     if len(u_ll) != 0:
         labels_ll_u = np.vstack([label(n) for n in u_ll])
     else:
-        labels_ll_u = np.array([])
+        labels_ll_u = np.empty((0, data.target.shape[1]))
 
     nodes_ll_v = data.source[v_ll]
 
     if len(v_ll) != 0:
         labels_ll_v = np.vstack([label(n) for n in v_ll])
     else:
-        labels_ll_v = np.array([])
+        labels_ll_v = np.empty((0, data.target.shape[1]))
 
     u_lu = [e[0] for e in edges_lu]
     c_ulu = [1 / len(graph.edges(n)) for n in u_lu]
@@ -85,7 +90,7 @@ def next_batch(h_edges, start, finish):
     if len(u_lu) != 0:
         labels_lu = np.vstack([label(n) for n in u_lu])
     else:
-        labels_lu = np.array([])
+        labels_lu = np.empty((0, data.target.shape[1]))
 
     nodes_uu_u = data.source[[e[0] for e in edges_uu]]
     nodes_uu_v = data.source[[e[1] for e in edges_uu]]
