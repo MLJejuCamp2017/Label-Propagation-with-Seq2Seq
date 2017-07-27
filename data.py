@@ -5,9 +5,9 @@ import pickle
 from glob import glob
 import os
 
-class KOEN(object):
+class ENVI(object):
     """
-    Load Korean to English Parallel Corpus
+    Load English to Vietnamese Parallel Corpus
     """
     
     def __init__(self, batch_size=32, mode='train'):

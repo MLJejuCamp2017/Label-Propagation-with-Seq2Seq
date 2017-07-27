@@ -6,7 +6,10 @@
 
 *.pyc
 .*.swp
+*.ckpt.*
+checkpoint
 
+nmt_data/*
 data/*
-logs/*
-old/*
+log/*
+preprocess_data/*
