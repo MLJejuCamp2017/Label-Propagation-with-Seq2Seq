@@ -13,3 +13,5 @@ nmt_data/*
 data/*
 log/*
 preprocess_data/*
+
+__pycache__

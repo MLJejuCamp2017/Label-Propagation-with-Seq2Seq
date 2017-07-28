@@ -1,2 +1,1 @@
-# graph2graph
-Semi-Supervised Learning Techniques for Seq2Seq Models
+# Label-Propagation with Seq2Seq
